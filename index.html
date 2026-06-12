@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UC Berkeley Campus Energy Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --berkeley-blue: #003262;
+    --berkeley-gold: #FDB515;
+    --gold-dark: #c09000;
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --border: #e2e5ea;
+    --border-light: #f0f2f5;
+    --text: #1a1d23;
+    --text-muted: #6b7280;
+    --text-light: #9ca3af;
+    --green: #1a6a30;
+    --red: #a32d2d;
+    --orange: #c05000;
+    --blue-mid: #1a6fa8;
+    --teal: #2a7a50;
+    --radius: 8px;
+    --radius-sm: 5px;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* TOPBAR */
+  .topbar {
+    background: var(--berkeley-blue);
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  .topbar-left { display: flex; align-items: center; gap: 14px; }
+  .ucb-seal {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--berkeley-gold);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: var(--berkeley-blue);
+    letter-spacing: -.5px; flex-shrink: 0;
+  }
+  .topbar-title { font-size: 15px; font-weight: 600; color: var(--berkeley-gold); }
+  .topbar-sub { font-size: 11px; color: rgba(253,181,21,.6); margin-top: 1px; }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+  .internal-badge {
+    background: rgba(253,181,21,.15);
+    border: 1px solid rgba(253,181,21,.3);
+    color: var(--berkeley-gold);
+    font-size: 11px; font-weight: 500;
+    padding: 3px 10px; border-radius: 20px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .last-updated { font-size: 11px; color: rgba(253,181,21,.45); }
+
+  /* LAYOUT */
+  .layout { display: grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 56px); }
+
+  /* SIDEBAR */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 18px 16px;
+    display: flex; flex-direction: column; gap: 20px;
+    overflow-y: auto;
+    max-height: calc(100vh - 56px);
+    position: sticky; top: 56px;
+  }
+  .section-label {
+    font-size: 10px; font-weight: 600;
+    color: var(--text-light);
+    text-transform: uppercase; letter-spacing: .08em;
+    display: block; margin-bottom: 8px;
+  }
+
+  /* UTILITY BUTTONS */
+  .utility-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ubtn {
+    padding: 8px 6px; font-size: 11px; font-weight: 500;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer; text-align: center;
+    transition: all .15s; display: flex; align-items: center;
+    justify-content: center; gap: 5px;
+  }
+  .ubtn:hover { border-color: var(--berkeley-blue); color: var(--berkeley-blue); }
+  .ubtn.active { border-color: var(--berkeley-blue); background: var(--berkeley-blue); color: var(--berkeley-gold); }
+  .ubtn svg { flex-shrink: 0; }
+
+  /* BUILDING LIST */
+  .bldg-controls { display: flex; gap: 5px; margin-bottom: 6px; }
+  .mini-btn {
+    flex: 1; padding: 5px 6px; font-size: 11px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text-muted); cursor: pointer;
+    transition: all .15s;
+  }
+  .mini-btn:hover { background: var(--bg); }
+  .bldg-list {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .bldg-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 11px; font-size: 12px; cursor: pointer;
+    border-bottom: 1px solid var(--border-light);
+    color: var(--text); transition: background .1s; user-select: none;
+  }
+  .bldg-item:last-child { border-bottom: none; }
+  .bldg-item:hover { background: var(--bg); }
+  .bldg-item.selected { background: #eef3fa; }
+  .bchk {
+    width: 15px; height: 15px; border: 1.5px solid var(--border);
+    border-radius: 4px; display: flex; align-items: center;
+    justify-content: center; flex-shrink: 0;
+    background: var(--surface); transition: all .15s;
+  }
+  .bchk.checked { background: var(--berkeley-blue); border-color: var(--berkeley-blue); }
+  .bchk.checked::after {
+    content: ''; display: block;
+    width: 7px; height: 5px;
+    border-left: 2px solid var(--berkeley-gold);
+    border-bottom: 2px solid var(--berkeley-gold);
+    transform: rotate(-45deg) translateY(-1px);
+  }
+  .solar-pip {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--berkeley-gold); border: 1px solid var(--gold-dark);
+    flex-shrink: 0;
+  }
+  .no-pip { width: 7px; flex-shrink: 0; }
+  .solar-note {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: #8a6800; padding: 7px 0 0;
+  }
+
+  /* DATE RANGE */
+  .quick-range { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .qbtn {
+    padding: 4px 10px; font-size: 11px; font-weight: 500;
+    border: 1px solid var(--border); border-radius: 20px;
+    background: var(--surface); color: var(--text-muted);
+    cursor: pointer; transition: all .15s;
+  }
+  .qbtn:hover { border-color: var(--berkeley-blue); color: var(--berkeley-blue); }
+  .qbtn.active { background: var(--berkeley-blue); border-color: var(--berkeley-blue); color: var(--berkeley-gold); }
+  .date-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .date-inputs label { font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 3px; }
+  .date-inputs input {
+    width: 100%; font-size: 11px; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text);
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* SEGMENTED CONTROLS */
+  .seg {
+    display: flex; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); overflow: hidden;
+  }
+  .seg-btn {
+    flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 500;
+    border: none; border-right: 1px solid var(--border);
+    background: var(--surface); color: var(--text-muted);
+    cursor: pointer; transition: all .15s; text-align: center;
+    font-family: 'Inter', sans-serif;
+  }
+  .seg-btn:last-child { border-right: none; }
+  .seg-btn.active { background: var(--berkeley-blue); color: var(--berkeley-gold); }
+  .seg-btn:hover:not(.active) { background: var(--bg); }
+  .seg-label { font-size: 10px; color: var(--text-light); margin-top: 5px; }
+
+  /* SOLAR */
+  .solar-card {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .solar-card.disabled { opacity: .4; pointer-events: none; }
+  .solar-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 11px; cursor: pointer;
+  }
+  .solar-header:hover { background: var(--bg); }
+  .solar-header-left { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; }
+  .toggle-track {
+    width: 34px; height: 19px; border-radius: 10px;
+    background: var(--border); position: relative;
+    transition: background .2s; flex-shrink: 0;
+  }
+  .toggle-track.on { background: var(--berkeley-blue); }
+  .toggle-thumb {
+    position: absolute; top: 2.5px; left: 2.5px;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: white; transition: left .2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  }
+  .toggle-track.on .toggle-thumb { left: 17.5px; }
+  .solar-legend { padding: 8px 11px 10px; border-top: 1px solid var(--border-light); display: none; gap: 8px; flex-direction: column; }
+  .solar-legend.visible { display: flex; }
+  .leg-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
+  .leg-swatch { width: 24px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+  .solar-hint { font-size: 11px; color: var(--text-light); margin-top: 6px; }
+
+  /* DOWNLOAD BUTTON */
+  .dl-btn {
+    width: 100%; padding: 10px; font-size: 13px; font-weight: 600;
+    background: var(--berkeley-blue); color: var(--berkeley-gold);
+    border: none; border-radius: var(--radius); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    transition: background .15s; font-family: 'Inter', sans-serif;
+    letter-spacing: .01em;
+  }
+  .dl-btn:hover { background: #002244; }
+
+  /* MAIN CONTENT */
+  .content { display: flex; flex-direction: column; min-width: 0; }
+
+  /* MAP */
+  .map-wrap {
+    position: relative; height: 320px;
+    border-bottom: 1px solid var(--border); overflow: hidden;
+    background: #c8dfc0;
+  }
+  .map-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: grab; }
+  .map-canvas.panning { cursor: grabbing; }
+  .zoom-controls {
+    position: absolute; top: 12px; right: 12px;
+    display: flex; flex-direction: column; gap: 4px; z-index: 10;
+  }
+  .zoom-btn {
+    width: 30px; height: 30px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); font-size: 17px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text); box-shadow: var(--shadow); transition: background .1s;
+    font-family: 'Inter', sans-serif;
+  }
+  .zoom-btn:hover { background: var(--bg); }
+  .map-legend-box {
+    position: absolute; bottom: 12px; right: 12px;
+    background: rgba(255,255,255,.94);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 8px 11px; font-size: 10px; z-index: 10;
+    box-shadow: var(--shadow);
+  }
+  .map-leg-row { display: flex; align-items: center; gap: 6px; color: var(--text-muted); margin-bottom: 3px; }
+  .map-leg-row:last-child { margin-bottom: 0; }
+  .map-leg-dot { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid white; flex-shrink: 0; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .map-tooltip {
+    position: absolute; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 8px 11px; font-size: 11px; pointer-events: none;
+    display: none; z-index: 20; min-width: 160px;
+    box-shadow: var(--shadow-md);
+  }
+  .map-tooltip strong { display: block; margin-bottom: 3px; font-size: 12px; }
+
+  /* STATS */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .stat {
+    padding: 13px 18px; border-right: 1px solid var(--border);
+  }
+  .stat:last-child { border-right: none; }
+  .stat-lbl { font-size: 10px; font-weight: 500; color: var(--text-light); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  .stat-val { font-size: 20px; font-weight: 600; color: var(--text); line-height: 1.2; }
+  .stat-unit { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+
+  /* CHART */
+  .chart-section { padding: 18px 20px; background: var(--surface); flex: 1; }
+  .chart-hdr { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; gap: 10px; }
+  .chart-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .chart-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+  .chart-tags { display: flex; flex-wrap: wrap; gap: 4px; max-width: 280px; justify-content: flex-end; }
+  .ctag {
+    font-size: 10px; font-weight: 500;
+    background: var(--berkeley-blue); color: var(--berkeley-gold);
+    padding: 3px 8px; border-radius: 20px;
+  }
+  .ctag.solar { background: var(--berkeley-gold); color: var(--berkeley-blue); }
+
+  /* FOOTER */
+  .footer {
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; color: var(--text-light);
+  }
+  .footer a { color: var(--berkeley-blue); text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+
+  /* DEMO BANNER */
+  .demo-banner {
+    background: #fffbeb; border-bottom: 1px solid #f6d860;
+    padding: 8px 20px; font-size: 12px; color: #856300;
+    display: flex; align-items: center; gap: 8px;
+    position: sticky; top: 56px; z-index: 99;
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="ucb-seal" aria-hidden="true">UC</div>
+    <div>
+      <div class="topbar-title">UC Berkeley Campus Energy Dashboard</div>
+      <div class="topbar-sub">Real-time utility monitoring · Buildings &amp; Infrastructure</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="internal-badge">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><rect x="1" y="4" width="8" height="6" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M3 4V3a2 2 0 014 0v1" stroke="currentColor" stroke-width="1.2"/></svg>
+      Internal access only
+    </div>
+    <div class="last-updated" id="last-updated"></div>
+  </div>
+</header>
+
+<div class="demo-banner" role="alert">
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="6" stroke="#856300" stroke-width="1.2"/><path d="M7 4v3.5M7 9.5v.5" stroke="#856300" stroke-width="1.4" stroke-linecap="round"/></svg>
+  <strong>Preview mode</strong> — showing sample data. Live SkySpark connection and real GIS building footprints coming soon.
+</div>
+
+<div class="layout">
+  <aside class="sidebar" aria-label="Dashboard filters">
+
+    <div>
+      <span class="section-label">Utility type</span>
+      <div class="utility-grid">
+        <button class="ubtn active" onclick="setUtility('electricity',this)" aria-pressed="true">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M7.5 1L2 7.5h4.5L5.5 12 11 5.5H6.5L7.5 1z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          Electricity
+        </button>
+        <button class="ubtn" onclick="setUtility('gas',this)" aria-pressed="false">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M6.5 11.5C4.5 11.5 2.5 9.8 2.5 7.5c0-2 1.5-3.5 2-5 .5 1.5 1 2 1 3 .5-.5.5-1.5.5-2.5C8.5 4.5 10.5 6 10.5 7.5c0 2.3-2 4-4 4z" stroke="currentColor" stroke-width="1.2"/></svg>
+          Natural gas
+        </button>
+        <button class="ubtn" onclick="setUtility('water',this)" aria-pressed="false">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M6.5 2C6.5 2 2.5 6.5 2.5 8.5a4 4 0 008 0C10.5 6.5 6.5 2 6.5 2z" stroke="currentColor" stroke-width="1.2"/></svg>
+          Water
+        </button>
+        <button class="ubtn" onclick="setUtility('steam',this)" aria-pressed="false">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M3 10c0-2 1-3 1-5M6.5 10c0-2 1-3 1-5M10 10c0-2 1-3 1-5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          Steam/CHW
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <span class="section-label">Buildings <span id="sel-count" style="color:var(--text);font-weight:600"></span></span>
+      <div class="bldg-controls">
+        <button class="mini-btn" onclick="selectAll()">Select all</button>
+        <button class="mini-btn" onclick="clearSel()">Clear</button>
+      </div>
+      <div class="bldg-list" id="bldg-list" role="group" aria-label="Building selection"></div>
+      <div class="solar-note">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--berkeley-gold);border:1px solid var(--gold-dark);flex-shrink:0"></span>
+        Gold dot = rooftop solar metered
+      </div>
+    </div>
+
+    <div>
+      <span class="section-label">Date range</span>
+      <div class="quick-range" id="quick-range"></div>
+      <div class="date-inputs">
+        <div><label for="date-from">From</label><input type="date" id="date-from" onchange="onDateChange()"></div>
+        <div><label for="date-to">To</label><input type="date" id="date-to" onchange="onDateChange()"></div>
+      </div>
+    </div>
+
+    <div id="unit-section">
+      <span class="section-label">Unit <span style="color:var(--text-light);font-weight:400;text-transform:none;letter-spacing:0">(electricity only)</span></span>
+      <div class="seg" role="group" aria-label="Unit selection">
+        <button class="seg-btn active" onclick="setUnit('kWh',this)">kWh</button>
+        <button class="seg-btn" onclick="setUnit('kW',this)">kW demand</button>
+      </div>
+    </div>
+
+    <div>
+      <span class="section-label">Export interval</span>
+      <div class="seg" role="group" aria-label="Data interval selection">
+        <button class="seg-btn active" onclick="setDataInterval('1d',this)">1 day</button>
+        <button class="seg-btn" onclick="setDataInterval('1h',this)">1 hour</button>
+        <button class="seg-btn" onclick="setDataInterval('15m',this)">15 min</button>
+      </div>
+      <div class="seg-label" id="interval-note">Exporting daily totals.</div>
+    </div>
+
+    <div>
+      <span class="section-label">Solar production overlay</span>
+      <div class="solar-card" id="solar-card">
+        <div class="solar-header" onclick="toggleSolar()" role="button" aria-label="Toggle solar production overlay" tabindex="0">
+          <div class="solar-header-left">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="2.5" stroke="#b07000" stroke-width="1.2"/><path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.9 2.9l1.1 1.1M10 10l1.1 1.1M2.9 11.1L4 10M10 4l1.1-1.1" stroke="#b07000" stroke-width="1.2" stroke-linecap="round"/></svg>
+            Show solar production
+          </div>
+          <div class="toggle-track" id="solar-track" aria-hidden="true"><div class="toggle-thumb"></div></div>
+        </div>
+        <div class="solar-legend" id="solar-legend">
+          <div class="leg-item"><span class="leg-swatch" style="background:var(--berkeley-blue)"></span>Net consumption</div>
+          <div class="leg-item"><span class="leg-swatch" style="background:var(--berkeley-gold);border:1px dashed var(--gold-dark)"></span>Solar production</div>
+          <div class="leg-item"><span class="leg-swatch" style="background:var(--orange)"></span>Gross (pre-solar)</div>
+        </div>
+      </div>
+      <div class="solar-hint" id="solar-hint">Select a solar-metered building to enable.</div>
+    </div>
+
+    <button class="dl-btn" onclick="downloadCSV()" aria-label="Download filtered data as CSV">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Download filtered data
+    </button>
+
+  </aside>
+
+  <main class="content" aria-label="Dashboard content">
+    <div class="map-wrap" id="map-wrap" aria-label="Campus map">
+      <canvas id="map-canvas" class="map-canvas" role="img" aria-label="Interactive campus map showing building energy meters"></canvas>
+      <div class="zoom-controls" aria-label="Map zoom controls">
+        <button class="zoom-btn" onclick="zoom(1.25)" aria-label="Zoom in">+</button>
+        <button class="zoom-btn" onclick="zoom(0.8)" aria-label="Zoom out">−</button>
+        <button class="zoom-btn" onclick="resetView()" aria-label="Reset map view" title="Reset">⌂</button>
+      </div>
+      <div class="map-legend-box" aria-hidden="true">
+        <div class="map-leg-row"><span class="map-leg-dot" style="background:#7a9ab0"></span>Not selected</div>
+        <div class="map-leg-row"><span class="map-leg-dot" style="background:var(--berkeley-blue)"></span>Selected</div>
+        <div class="map-leg-row"><span class="map-leg-dot" style="background:var(--berkeley-gold);border-color:var(--gold-dark)"></span>Solar metered</div>
+      </div>
+      <div class="map-tooltip" id="map-tooltip" aria-live="polite"></div>
+    </div>
+
+    <div class="stats-row" id="stats-row" aria-label="Summary statistics"></div>
+
+    <div class="chart-section">
+      <div class="chart-hdr">
+        <div>
+          <div class="chart-title" id="chart-title">Electricity — entire campus</div>
+          <div class="chart-sub" id="chart-sub"></div>
+        </div>
+        <div class="chart-tags" id="chart-tags"></div>
+      </div>
+      <div style="position:relative;width:100%;height:220px">
+        <canvas id="mainChart" role="img" aria-label="Line chart of campus utility consumption over selected period"></canvas>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <span>UC Berkeley Energy &amp; Sustainability · <a href="mailto:energy@berkeley.edu">energy@berkeley.edu</a></span>
+      <span>Data source: SkySpark · Preview mode — live data coming soon</span>
+    </footer>
+  </main>
+</div>
+
+<script>
+// ─── DATA ───────────────────────────────────────────────────────────────────
+const BUILDINGS = [
+  {id:'all',    name:'Entire campus',          solar:false, x:.50, y:.50},
+  {id:'sather', name:'Sather Tower',            solar:false, x:.25, y:.22},
+  {id:'doe',    name:'Doe Memorial Library',    solar:false, x:.40, y:.18},
+  {id:'stanley',name:'Stanley Hall',            solar:true,  x:.56, y:.24},
+  {id:'haas',   name:'Haas School of Business', solar:true,  x:.70, y:.19},
+  {id:'evans',  name:'Evans Hall',              solar:false, x:.19, y:.58},
+  {id:'unit1',  name:'Unit 1 Residence Hall',   solar:true,  x:.42, y:.55},
+  {id:'valley', name:'Valley Life Sciences',    solar:false, x:.62, y:.48},
+  {id:'cory',   name:'Cory Hall',               solar:true,  x:.82, y:.52},
+];
+const UTILITY = {
+  electricity: {label:'Electricity', unit:'kWh',   color:'#003262', scale:1},
+  gas:         {label:'Natural gas',  unit:'therms',color:'#c05000', scale:.18},
+  water:       {label:'Water',        unit:'gal',   color:'#1a6fa8', scale:4.2},
+  steam:       {label:'Steam/CHW',    unit:'MMBtu', color:'#2a7a50', scale:.08},
+};
+const BLDG_COLORS = ['#003262','#c05000','#1a6fa8','#2a7a50','#7a1a6a','#6a4a00','#1a4a2a','#5a1a1a'];
+
+// ─── STATE ──────────────────────────────────────────────────────────────────
+let curUtil = 'electricity', curUnit = 'kWh', curInterval = '1d';
+let selectedIds = new Set(['all']);
+let showSolar = false;
+let chartInst = null;
+
+// ─── DATES ──────────────────────────────────────────────────────────────────
+function fmt(d) { return d.toISOString().split('T')[0]; }
+const today = new Date();
+const fiveYearsAgo = new Date(today); fiveYearsAgo.setFullYear(today.getFullYear() - 5);
+const dfrom = document.getElementById('date-from');
+const dto   = document.getElementById('date-to');
+dfrom.min = fmt(fiveYearsAgo); dfrom.max = fmt(today);
+dto.min   = fmt(fiveYearsAgo); dto.max   = fmt(today);
+document.getElementById('last-updated').textContent =
+  'Updated ' + today.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' 6:00 AM';
+
+const QUICK = [
+  {l:'1D',d:1},{l:'1W',d:7},{l:'1M',d:30},{l:'3M',d:90},
+  {l:'6M',d:180},{l:'1Y',d:365},{l:'5Y',d:1825},{l:'All',d:1825}
+];
+const qrWrap = document.getElementById('quick-range');
+QUICK.forEach((r, i) => {
+  const b = document.createElement('button');
+  b.className = 'qbtn'; b.textContent = r.l;
+  b.onclick = () => {
+    document.querySelectorAll('.qbtn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    const f = new Date(today);
+    f.setDate(today.getDate() - (r.l === 'All' ? 1825 : r.d));
+    dfrom.value = fmt(f); dto.value = fmt(today); updateAll();
+  };
+  qrWrap.appendChild(b);
+});
+qrWrap.children[2].click(); // default 1M
+
+function onDateChange() {
+  document.querySelectorAll('.qbtn').forEach(x => x.classList.remove('active'));
+  updateAll();
+}
+
+// ─── UNIT + INTERVAL ────────────────────────────────────────────────────────
+function setUnit(u, btn) {
+  curUnit = u;
+  document.querySelectorAll('#unit-section .seg-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active'); updateAll();
+}
+function setDataInterval(v, btn) {
+  curInterval = v;
+  btn.closest('.seg').querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('interval-note').textContent =
+    v === '1d' ? 'Exporting daily totals.' :
+    v === '1h' ? 'Exporting hourly data — larger file for long ranges.' :
+    'Exporting 15-min data — very large file for long ranges.';
+  updateAll();
+}
+
+// ─── BUILDINGS ──────────────────────────────────────────────────────────────
+function buildBldgList() {
+  const list = document.getElementById('bldg-list'); list.innerHTML = '';
+  BUILDINGS.forEach(b => {
+    const isSel = selectedIds.has(b.id);
+    const div = document.createElement('div');
+    div.className = 'bldg-item' + (isSel ? ' selected' : '');
+    div.setAttribute('role', 'checkbox');
+    div.setAttribute('aria-checked', isSel ? 'true' : 'false');
+    div.setAttribute('tabindex', '0');
+    div.innerHTML = `
+      <div class="bchk${isSel ? ' checked' : ''}"></div>
+      ${b.solar ? '<span class="solar-pip" title="Rooftop solar metered"></span>' : '<span class="no-pip"></span>'}
+      <span>${b.name}</span>`;
+    div.onclick = () => toggleBuilding(b.id);
+    div.onkeydown = e => { if(e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleBuilding(b.id); }};
+    list.appendChild(div);
+  });
+  document.getElementById('sel-count').textContent =
+    '(' + (selectedIds.has('all') ? 'all' : selectedIds.size) + ')';
+}
+function toggleBuilding(id) {
+  if (id === 'all') { selectedIds.clear(); selectedIds.add('all'); }
+  else {
+    selectedIds.delete('all');
+    selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id);
+    if (selectedIds.size === 0) selectedIds.add('all');
+  }
+  buildBldgList(); updateSolarState(); updateAll(); drawMap();
+}
+function selectAll() { selectedIds.clear(); selectedIds.add('all'); buildBldgList(); updateSolarState(); updateAll(); drawMap(); }
+function clearSel()  { selectedIds.clear(); selectedIds.add('all'); buildBldgList(); updateSolarState(); updateAll(); drawMap(); }
+
+function hasSolarSelected() {
+  return curUtil === 'electricity' && (
+    selectedIds.has('all') ||
+    [...selectedIds].some(id => { const b = BUILDINGS.find(x => x.id === id); return b && b.solar; })
+  );
+}
+function updateSolarState() {
+  const has = hasSolarSelected();
+  const card = document.getElementById('solar-card');
+  card.classList.toggle('disabled', !has);
+  document.getElementById('solar-hint').textContent = !has
+    ? (curUtil !== 'electricity' ? 'Switch to electricity to use solar overlay.' : 'Select a solar-metered building to enable.')
+    : 'Toggle to overlay solar production on the chart.';
+  if (!has && showSolar) { showSolar = false; document.getElementById('solar-track').classList.remove('on'); document.getElementById('solar-legend').classList.remove('visible'); }
+}
+function toggleSolar() {
+  if (!hasSolarSelected()) return;
+  showSolar = !showSolar;
+  document.getElementById('solar-track').classList.toggle('on', showSolar);
+  document.getElementById('solar-legend').classList.toggle('visible', showSolar);
+  updateAll();
+}
+
+// ─── UTILITY ────────────────────────────────────────────────────────────────
+function setUtility(u, btn) {
+  curUtil = u;
+  document.querySelectorAll('.ubtn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed','false'); });
+  btn.classList.add('active'); btn.setAttribute('aria-pressed','true');
+  const unitSec = document.getElementById('unit-section');
+  unitSec.style.opacity = u === 'electricity' ? '1' : '.4';
+  unitSec.style.pointerEvents = u === 'electricity' ? '' : 'none';
+  updateSolarState(); updateAll();
+}
+
+// ─── FAKE DATA ───────────────────────────────────────────────────────────────
+function sr(seed) { const x = Math.sin(seed + 1) * 10000; return x - Math.floor(x); }
+function genNet(bldgId, util, days) {
+  const meta = UTILITY[util];
+  const base = bldgId === 'all' ? 900 : 130;
+  const bIdx = Math.max(0, BUILDINGS.findIndex(b => b.id === bldgId));
+  return Array.from({length: days}, (_, i) => {
+    const s = sr(i * 17 + bIdx * 100 + util.charCodeAt(0));
+    const trend = util === 'electricity' ? Math.sin(i / 7 * Math.PI) * .12 : 0;
+    return Math.round((base + base * trend + base * .28 * s) * meta.scale);
+  });
+}
+function genSolar(bldgId, days) {
+  const bIdx = Math.max(0, BUILDINGS.findIndex(b => b.id === bldgId));
+  return Array.from({length: days}, (_, i) => {
+    const s = sr(i * 13 + bIdx * 77 + 99);
+    return Math.round(35 + 28 * s + 18 * Math.sin(i / 7 * Math.PI));
+  });
+}
+
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+function getDays() {
+  const f = new Date(dfrom.value), t = new Date(dto.value);
+  return Math.max(1, Math.round((t - f) / 86400000) + 1);
+}
+function getLabels(days) {
+  const end = new Date(dto.value); const labels = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(end); d.setDate(d.getDate() - i);
+    if (days <= 60) labels.push(d.toLocaleDateString('en-US', {month:'short', day:'numeric'}));
+    else if (days <= 400) labels.push(i % 14 === 0 ? d.toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '');
+    else labels.push(i % 90 === 0 ? d.toLocaleDateString('en-US', {month:'short', year:'2-digit'}) : '');
+  }
+  return labels;
+}
+function updateAll() { updateStats(); updateChart(); }
+
+// ─── STATS ──────────────────────────────────────────────────────────────────
+function updateStats() {
+  const meta = UTILITY[curUtil];
+  const days = Math.min(getDays(), 30);
+  const ids = selectedIds.has('all') ? ['all'] : [...selectedIds];
+  let total = 0, peak = 0;
+  ids.forEach(id => { const d = genNet(id, curUtil, days); total += d.reduce((a,b) => a+b, 0); peak = Math.max(peak, ...d); });
+  const avg = Math.round(total / days);
+  const unitLabel = curUtil === 'electricity' ? curUnit : meta.unit;
+  const kWf = curUnit === 'kW' && curUtil === 'electricity' ? 0.25 : 1;
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat"><div class="stat-lbl">Total (30 days)</div><div class="stat-val">${Math.round(total*kWf).toLocaleString()} <span class="stat-unit">${unitLabel}</span></div></div>
+    <div class="stat"><div class="stat-lbl">Daily average</div><div class="stat-val">${Math.round(avg*kWf).toLocaleString()} <span class="stat-unit">${unitLabel}/day</span></div></div>
+    <div class="stat"><div class="stat-lbl">Peak day</div><div class="stat-val">${Math.round(peak*kWf).toLocaleString()} <span class="stat-unit">${unitLabel}</span></div></div>
+    <div class="stat"><div class="stat-lbl">vs. prior year</div><div class="stat-val" style="color:var(--green)">−7% <span class="stat-unit">↓</span></div></div>`;
+}
+
+// ─── CHART ──────────────────────────────────────────────────────────────────
+function updateChart() {
+  const meta = UTILITY[curUtil];
+  const days = getDays();
+  const labels = getLabels(days);
+  const ids = selectedIds.has('all') ? ['all'] : [...selectedIds];
+  const unitLabel = curUtil === 'electricity' ? curUnit : meta.unit;
+  const kWf = curUnit === 'kW' && curUtil === 'electricity' ? 0.25 : 1;
+
+  document.getElementById('chart-title').textContent =
+    `${meta.label}${curUtil==='electricity'?' ('+curUnit+')':''} — ${selectedIds.has('all') ? 'entire campus' : ids.length + ' building' + (ids.length > 1 ? 's' : '')}`;
+  document.getElementById('chart-sub').textContent =
+    `${dfrom.value} → ${dto.value} · ${unitLabel} · ${curInterval==='1d'?'daily':curInterval==='1h'?'hourly':'15-min'} export` +
+    (showSolar ? ' · solar overlay on' : '');
+
+  const tags = document.getElementById('chart-tags'); tags.innerHTML = '';
+  if (!selectedIds.has('all')) {
+    ids.slice(0, 3).forEach(id => {
+      const b = BUILDINGS.find(x => x.id === id);
+      const sp = document.createElement('span'); sp.className = 'ctag';
+      sp.textContent = b ? b.name.split(' ')[0] : id; tags.appendChild(sp);
+    });
+    if (ids.length > 3) { const sp = document.createElement('span'); sp.className = 'ctag'; sp.textContent = `+${ids.length-3}`; tags.appendChild(sp); }
+  }
+  if (showSolar) { const sp = document.createElement('span'); sp.className = 'ctag solar'; sp.textContent = '☀ solar'; tags.appendChild(sp); }
+
+  const datasets = [];
+  ids.forEach((id, i) => {
+    const net = genNet(id, curUtil, days).map(v => Math.round(v * kWf));
+    const b = BUILDINGS.find(x => x.id === id);
+    const col = BLDG_COLORS[i % BLDG_COLORS.length];
+    const lbl = ids.length > 1 ? (b ? b.name.split(' ')[0] : 'Campus') : 'Net consumption';
+
+    if (showSolar && b && b.solar && curUtil === 'electricity') {
+      const solar = genSolar(id, days);
+      const gross = net.map((v, j) => v + solar[j]);
+      // Gross area (behind everything)
+      datasets.push({
+        label: (ids.length>1?lbl+' ':'') + `gross pre-solar (${unitLabel})`,
+        data: gross, borderColor: '#c05000', backgroundColor: 'rgba(192,80,0,.10)',
+        borderWidth: 1.5, pointRadius: 0, fill: true, tension: .35, order: 3
+      });
+      // Solar production — gold dashed
+      datasets.push({
+        label: (ids.length>1?lbl+' ':'') + 'solar production (kWh)',
+        data: solar, borderColor: '#e6a800', backgroundColor: 'rgba(230,168,0,.12)',
+        borderWidth: 2, borderDash: [6,3], pointRadius: 0, fill: true, tension: .35, order: 1
+      });
+    }
+
+    // Net line — always on top
+    datasets.push({
+      label: lbl + ` net (${unitLabel})`,
+      data: net, borderColor: col, backgroundColor: col + '18',
+      borderWidth: 2, pointRadius: days > 90 ? 0 : 2.5,
+      fill: ids.length === 1 && !showSolar, tension: .35, order: 2
+    });
+  });
+
+  if (chartInst) chartInst.destroy();
+  chartInst = new Chart(document.getElementById('mainChart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: datasets.length > 1,
+          labels: { font: { size: 10, family: 'Inter' }, boxWidth: 12, padding: 10 }
+        },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} ${unitLabel}` } }
+      },
+      scales: {
+        x: { ticks: { font: { size: 10, family: 'Inter' }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }, grid: { display: false } },
+        y: { ticks: { font: { size: 10, family: 'Inter' }, callback: v => v >= 1000 ? (v/1000).toFixed(1)+'k' : v }, grid: { color: 'rgba(0,0,0,.04)' } }
+      }
+    }
+  });
+}
+
+// ─── DOWNLOAD ───────────────────────────────────────────────────────────────
+function downloadCSV() {
+  const meta = UTILITY[curUtil];
+  const days = getDays();
+  const end = new Date(dto.value);
+  const ids = selectedIds.has('all') ? BUILDINGS.filter(b => b.id !== 'all').map(b => b.id) : [...selectedIds];
+  const unitLabel = curUtil === 'electricity' ? curUnit : meta.unit;
+  const kWf = curUnit === 'kW' && curUtil === 'electricity' ? 0.25 : 1;
+  const hasSolar = curUtil === 'electricity' && ids.some(id => { const b = BUILDINGS.find(x => x.id === id); return b && b.solar; });
+  const header = ['Timestamp','Building','Utility','Interval',`Net (${unitLabel})`];
+  if (hasSolar) header.push('Solar production (kWh)', `Gross pre-solar (${unitLabel})`);
+  const rows = [header.join(',')];
+  const intervalsPerDay = curInterval === '1d' ? 1 : curInterval === '1h' ? 24 : 96;
+  for (let i = 0; i < days; i++) {
+    const d = new Date(end); d.setDate(d.getDate() - (days - 1 - i));
+    const ds = d.toISOString().split('T')[0];
+    ids.forEach(id => {
+      const b = BUILDINGS.find(x => x.id === id);
+      const netDay = Math.round(genNet(id, curUtil, days)[i] * kWf);
+      const solarDay = b && b.solar ? genSolar(id, days)[i] : 0;
+      for (let t = 0; t < intervalsPerDay; t++) {
+        const f = 1 / intervalsPerDay;
+        const iv = Math.round(netDay * f * (0.85 + sr(i*100 + t*7 + id.charCodeAt(0)) * 0.3));
+        const sv = b && b.solar ? Math.round(solarDay * f * (0.5 + sr(i*99 + t*5) * 0.8)) : 0;
+        const hh = Math.floor(t * (24 / intervalsPerDay));
+        const mm = (t * (60 / Math.min(intervalsPerDay, 24))) % 60;
+        const ts = curInterval === '1d' ? ds : `${ds} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+        const row = [ts, `"${b ? b.name : id}"`, meta.label, curInterval, iv];
+        if (hasSolar) row.push(sv, iv + sv);
+        rows.push(row.join(','));
+      }
+    });
+  }
+  const blob = new Blob([rows.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `ucb_${curUtil}_${curUnit}_${curInterval}_${dfrom.value}_${dto.value}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// ─── MAP ────────────────────────────────────────────────────────────────────
+const mapCanvas = document.getElementById('map-canvas');
+const mapCtx = mapCanvas.getContext('2d');
+let mapScale = 1, mapOffX = 0, mapOffY = 0, isPanning = false, panStartX = 0, panStartY = 0;
+
+function resizeMap() {
+  const wrap = document.getElementById('map-wrap');
+  mapCanvas.width = wrap.clientWidth; mapCanvas.height = wrap.clientHeight; drawMap();
+}
+function worldToScreen(nx, ny) {
+  return [nx * mapCanvas.width * mapScale + mapOffX, ny * mapCanvas.height * mapScale + mapOffY];
+}
+function drawMap() {
+  const w = mapCanvas.width, h = mapCanvas.height;
+  mapCtx.clearRect(0, 0, w, h);
+  mapCtx.fillStyle = '#c2d8b8'; mapCtx.fillRect(0, 0, w, h);
+  // Building footprints (placeholder)
+  const fp = [[.12,.10,.20,.18],[.28,.08,.24,.16],[.48,.13,.18,.14],[.62,.08,.20,.16],[.10,.42,.16,.22],[.32,.40,.26,.24],[.53,.36,.22,.20],[.74,.41,.18,.24]];
+  fp.forEach(([nx,ny,nw,nh]) => {
+    const [sx,sy] = worldToScreen(nx, ny);
+    mapCtx.fillStyle = '#96b88c'; mapCtx.strokeStyle = '#78a070'; mapCtx.lineWidth = .5;
+    mapCtx.beginPath(); mapCtx.rect(sx, sy, nw*w*mapScale, nh*h*mapScale); mapCtx.fill(); mapCtx.stroke();
+  });
+  [[0,.40,1,.40],[.26,0,.26,1],[.58,0,.58,1]].forEach(([x1,y1,x2,y2]) => {
+    const [sx1,sy1] = worldToScreen(x1,y1); const [sx2,sy2] = worldToScreen(x2,y2);
+    mapCtx.strokeStyle = '#a8c89e'; mapCtx.lineWidth = 5*mapScale;
+    mapCtx.beginPath(); mapCtx.moveTo(sx1,sy1); mapCtx.lineTo(sx2,sy2); mapCtx.stroke();
+  });
+  BUILDINGS.filter(b => b.id !== 'all').forEach(b => {
+    const [sx,sy] = worldToScreen(b.x, b.y);
+    const isSel = selectedIds.has('all') || selectedIds.has(b.id);
+    const r = isSel ? 9 : 6;
+    mapCtx.beginPath(); mapCtx.arc(sx, sy, r, 0, Math.PI*2);
+    mapCtx.fillStyle = isSel ? (b.solar ? '#FDB515' : '#003262') : '#8aabca';
+    mapCtx.fill(); mapCtx.strokeStyle = 'white'; mapCtx.lineWidth = 1.8; mapCtx.stroke();
+    if (isSel && mapScale > 0.7) {
+      mapCtx.fillStyle = '#1a1d23';
+      mapCtx.font = `${Math.round(10 * Math.min(mapScale, 1.6))}px Inter, sans-serif`;
+      mapCtx.textAlign = 'center'; mapCtx.textBaseline = 'bottom';
+      mapCtx.fillText(b.name.split(' ')[0], sx, sy - r - 3);
+    }
+  });
+  mapCtx.fillStyle = 'rgba(70,100,70,.5)'; mapCtx.font = '11px Inter, sans-serif';
+  mapCtx.textAlign = 'center'; mapCtx.textBaseline = 'bottom';
+  mapCtx.fillText('Real GIS building polygons will replace this placeholder map', w/2, h-10);
+}
+function zoom(f) { mapScale = Math.min(Math.max(mapScale * f, .35), 8); drawMap(); }
+function resetView() { mapScale = 1; mapOffX = 0; mapOffY = 0; drawMap(); }
+mapCanvas.addEventListener('mousedown', e => { isPanning=true; panStartX=e.clientX-mapOffX; panStartY=e.clientY-mapOffY; mapCanvas.classList.add('panning'); });
+window.addEventListener('mousemove', e => { if (!isPanning) return; mapOffX=e.clientX-panStartX; mapOffY=e.clientY-panStartY; drawMap(); });
+window.addEventListener('mouseup', () => { isPanning=false; mapCanvas.classList.remove('panning'); });
+mapCanvas.addEventListener('wheel', e => { e.preventDefault(); zoom(e.deltaY < 0 ? 1.1 : .9); }, {passive:false});
+const tt = document.getElementById('map-tooltip');
+mapCanvas.addEventListener('mousemove', e => {
+  const rect = mapCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  let hit = null;
+  BUILDINGS.filter(b => b.id !== 'all').forEach(b => { const [sx,sy] = worldToScreen(b.x,b.y); if (Math.hypot(mx-sx,my-sy) < 12) hit=b; });
+  if (hit) {
+    const meta = UTILITY[curUtil];
+    const val = genNet(hit.id, curUtil, 1)[0];
+    tt.style.display='block'; tt.style.left=(mx+14)+'px'; tt.style.top=(my-8)+'px';
+    tt.innerHTML=`<strong>${hit.name}${hit.solar?' ☀':''}  </strong><span style="color:var(--text-muted)">${meta.label}: ${val.toLocaleString()} ${meta.unit} today</span>`;
+  } else tt.style.display='none';
+});
+mapCanvas.addEventListener('click', e => {
+  const rect = mapCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  BUILDINGS.filter(b => b.id !== 'all').forEach(b => { const [sx,sy] = worldToScreen(b.x,b.y); if (Math.hypot(mx-sx,my-sy) < 12) toggleBuilding(b.id); });
+});
+
+// ─── INIT ───────────────────────────────────────────────────────────────────
+buildBldgList(); updateSolarState(); resizeMap(); updateAll();
+window.addEventListener('resize', resizeMap);
+</script>
+</body>
+</html>
