@@ -734,7 +734,7 @@ async function loadArcGIS(){
 
 function featName(f){
   const p = f.properties || {};
-  return p.BLDG_NAME || p.NAME || p.Building_Name || p.bldg_name || p.name || 'Unknown building';
+  return p.BuildingMapLabel || p.BuildingLegalName || p.BLDG_NAME || p.NAME || p.name || 'Unknown building';
 }
 function matchBuilding(gisName){
   const n = gisName.toLowerCase();
