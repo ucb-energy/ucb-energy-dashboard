@@ -723,7 +723,8 @@ async function loadArcGIS(){
         layer.bindTooltip(name, { sticky: true, opacity: .95 });
       }
     }).addTo(leafletMap);
-    if (geojsonLayer.getBounds().isValid()) leafletMap.fitBounds(geojsonLayer.getBounds(), { padding: [24,24] });
+    // Stay focused on main campus instead of fitting all buildings
+    leafletMap.setView([37.8719, -122.2585], 16);
   } catch (err) {
     console.warn('ArcGIS unavailable — using fallback markers.', err);
     loading.style.display = 'none';
